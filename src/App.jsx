@@ -1,45 +1,88 @@
 import {
   Box,
-  Button,
   Center,
   Flex,
-  Heading,
-  Image,
-  Input,
-  SimpleGrid,
-  Text,
 } from '@chakra-ui/react';
 import { Alchemy, Network, Utils } from 'alchemy-sdk';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ethers  } from 'ethers';
+import Table from './Table.jsx'
+import SearchBar from './SearchBar.jsx';
+import Spinner from './Spinner.jsx'
+
+
+const provider = new ethers.providers.Web3Provider(window.ethereum);
 
 function App() {
   const [userAddress, setUserAddress] = useState('');
   const [results, setResults] = useState([]);
   const [hasQueried, setHasQueried] = useState(false);
   const [tokenDataObjects, setTokenDataObjects] = useState([]);
+  const [spin, setSpin] = useState(false);
+  const [error, setError ] = useState("");
 
-  async function getTokenBalance() {
-    const config = {
-      apiKey: '<-- COPY-PASTE YOUR ALCHEMY API KEY HERE -->',
-      network: Network.ETH_MAINNET,
-    };
 
-    const alchemy = new Alchemy(config);
-    const data = await alchemy.core.getTokenBalances(userAddress);
 
-    setResults(data);
-
-    const tokenDataPromises = [];
-
-    for (let i = 0; i < data.tokenBalances.length; i++) {
-      const tokenData = alchemy.core.getTokenMetadata(
-        data.tokenBalances[i].contractAddress
-      );
-      tokenDataPromises.push(tokenData);
+  useEffect( () => {
+    
+    async function getAccounts() {
+      const accounts = await provider.send('eth_requestAccounts', []);
+      setUserAddress(accounts[0]);
+      console.log(userAddress);
+      setUserAddress("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045")
     }
 
-    setTokenDataObjects(await Promise.all(tokenDataPromises));
-    setHasQueried(true);
+    getAccounts();
+
+  }, [])
+
+   function isAccount(){
+      let address = userAddress;
+
+      if ( address.charAt(1) != 'x'){
+        address = '0x' + address;
+      }
+      const byteCount = ethers.utils.hexDataLength(address);
+      console.log(byteCount);
+      if ( byteCount!= 20){
+        setError("Invalid Address");
+        return false;
+      }
+      return true;
+  }
+
+
+
+  async function getTokenBalance() {
+    setSpin(true);
+    setHasQueried(false);
+    setError("");
+    if (isAccount()){
+          const config = {
+            apiKey: 'JgKX773fegjY277gz5QSDm1ZjJjO7Vbb',
+            network: Network.ETH_MAINNET,
+          };
+
+          const alchemy = new Alchemy(config);
+          const data = await alchemy.core.getTokenBalances(userAddress);
+
+          setResults(data);
+
+          const tokenDataPromises = [];
+
+          for (let i = 0; i < data.tokenBalances.length; i++) {
+            const tokenData = alchemy.core.getTokenMetadata(
+              data.tokenBalances[i].contractAddress
+            );
+            tokenDataPromises.push(tokenData);
+          }
+
+          setTokenDataObjects(await Promise.all(tokenDataPromises));
+          setHasQueried(true);
+
+  }
+    setSpin(false);
+
   }
   return (
     <Box w="100vw">
@@ -49,13 +92,9 @@ function App() {
           justifyContent="center"
           flexDirection={'column'}
         >
-          <Heading mb={0} fontSize={36}>
+          <h1>
             ERC-20 Token Indexer
-          </Heading>
-          <Text>
-            Plug in an address and this website will return all of its ERC-20
-            token balances!
-          </Text>
+          </h1>
         </Flex>
       </Center>
       <Flex
@@ -64,53 +103,14 @@ function App() {
         alignItems="center"
         justifyContent={'center'}
       >
-        <Heading mt={42}>
-          Get all the ERC-20 token balances of this address:
-        </Heading>
-        <Input
-          onChange={(e) => setUserAddress(e.target.value)}
-          color="black"
-          w="600px"
-          textAlign="center"
-          p={4}
-          bgColor="white"
-          fontSize={24}
-        />
-        <Button fontSize={20} onClick={getTokenBalance} mt={36} bgColor="blue">
-          Check ERC-20 Token Balances
-        </Button>
-
-        <Heading my={36}>ERC-20 token balances:</Heading>
-
+        <SearchBar value={userAddress} setValue={setUserAddress} search={getTokenBalance} />
         {hasQueried ? (
-          <SimpleGrid w={'90vw'} columns={4} spacing={24}>
-            {results.tokenBalances.map((e, i) => {
-              return (
-                <Flex
-                  flexDir={'column'}
-                  color="white"
-                  bg="blue"
-                  w={'20vw'}
-                  key={e.id}
-                >
-                  <Box>
-                    <b>Symbol:</b> ${tokenDataObjects[i].symbol}&nbsp;
-                  </Box>
-                  <Box>
-                    <b>Balance:</b>&nbsp;
-                    {Utils.formatUnits(
-                      e.tokenBalance,
-                      tokenDataObjects[i].decimals
-                    )}
-                  </Box>
-                  <Image src={tokenDataObjects[i].logo} />
-                </Flex>
-              );
-            })}
-          </SimpleGrid>
+           ( < Table Value={results.tokenBalances} Meta={tokenDataObjects} />)
         ) : (
-          'Please make a query! This may take a few seconds...'
+          spin ?  ( <Spinner />) : ('Please make a query! This may take a few seconds...')
         )}
+
+        <h2>{error}</h2>
       </Flex>
     </Box>
   );
